@@ -14,13 +14,27 @@ import {
 import { type DownloadUpdateResult, downloadUpdate } from './Downloader';
 import { checkIntegrity } from './Integrity';
 import { startInstallation } from './Installer';
+import { clearUpdateInstallationFiles } from './InstallationFiles/InstallationFileCleaner';
 import type { UpdateInfo } from 'electron-updater';
 
-export function requiresManualUpdate(): boolean {
-  return process.platform === 'darwin';
+export function requiresManualUpdate(
+  nodePlatform: string = process.platform,
+): boolean {
+  // autoUpdater cannot handle DMG files, requiring manual download management for these file types.
+  return nodePlatform === 'darwin';
 }
 
 export async function startManualUpdateProcess(info: UpdateInfo) {
+  try {
+    await clearUpdateInstallationFiles();
+  } catch (error) {
+    ElectronLogger.warn('Failed to clear previous update installation files:', error);
+  } finally {
+    executeManualUpdateProcess(info);
+  }
+}
+
+async function executeManualUpdateProcess(info: UpdateInfo): Promise<void> {
   try {
     const updateAction = await promptForManualUpdate();
     if (updateAction === ManualUpdateChoice.NoAction) {
@@ -36,7 +50,7 @@ export async function startManualUpdateProcess(info: UpdateInfo) {
       await downloadAndInstallUpdate(downloadUrl, info);
     }
   } catch (err) {
-    ElectronLogger.error('Unexpected error during updates', err);
+    ElectronLogger.error('Unexpected error during auto-update process', err);
     await handleUnexpectedError(info);
   }
 }
